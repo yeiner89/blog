@@ -4,7 +4,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 
@@ -40,30 +41,41 @@ app.get("/register", function (req, res) {
 });
 
 app.post("/register", async function (req, res) {
-  const newUser = new User({
-    email: req.body.username,
-    password: md5(req.body.password),
-  });
+  bcrypt.hash(req.body.password, saltRounds, async function (err, hash) {
+    const newUser = new User({
+      email: req.body.username,
+      password: hash,
+    });
 
-  try {
-    await newUser.save();
-    res.render("secrets");
-  } catch (err) {
-    console.log(err);
-  }
+    try {
+      await newUser.save();
+      res.render("secrets");
+    } catch (err) {
+      console.log(err);
+    }
+  });
 });
 
 app.post("/login", async function (req, res) {
   const username = req.body.username;
-  const password = md5(req.body.password);
+  const password = req.body.password;
 
   try {
     const foundUser = await User.findOne({ email: username }).exec();
 
-    if (foundUser && foundUser.password === password) {
-      res.render("secrets");
+    if (foundUser) {
+      // Compare the provided password with the hashed password in the database
+      bcrypt.compare(password, foundUser.password, function (err, result) {
+        if (result === true) {
+          // Passwords match; render the "secrets" view
+          res.render("secrets");
+        } else {
+          // Passwords do not match; handle authentication failure
+          res.render("login"); // You might want to render a login error page
+        }
+      });
     } else {
-      // Handle authentication failure (username or password incorrect)
+      // User not found; handle authentication failure
       res.render("login"); // You might want to render a login error page
     }
   } catch (err) {
